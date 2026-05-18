@@ -1,4 +1,4 @@
-# Superstore Retail Sales Data Warehouse
+# Superstore Data Warehouse & SSRS Reporting Solution
 
 ## Project Overview
 
