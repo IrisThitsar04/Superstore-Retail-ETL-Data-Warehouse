@@ -57,48 +57,87 @@ Core tables include:
 ### 3. Data Warehouse Layer
 A **star schema** implemented in the SalesInsights_DW warehouse for analytical querying and reporting.
 
+### The full data flow is:
+
+1. Raw CSV files are loaded into the source database, `SuperStore_dataset`.
+2. Data is transformed into normalized relational tables in `OrderManagementDB`.
+3. Dimension and fact tables are loaded into the data warehouse, `SalesInsights_DW`.
+4. SSRS reports are generated from the completed data warehouse.
+   
+## ERD Design
+
+The normalized staging database was designed to organise the raw Superstore data into relational entities before loading it into the data warehouse.
+
+<p align="center">
+  <img src="images/erd.png" alt="Superstore ERD Diagram" width="750">
+</p>
+
+The ERD includes customer, address, product, employee, shipping, order, order line, and return entities. This structure reduces duplication, enforces relationships between tables, and prepares the data for transformation into dimension and fact tables.
+
 ## Star Schema Design
 
-At the centre of the warehouse is the **SalesFact** table, surrounded by five dimension tables:
+The final warehouse uses a **star schema** implemented in `SalesInsights_DW`. At the centre of the model is the `SalesFact` table, surrounded by five dimension tables.
+
+<p align="center">
+  <img src="images/star_schema.png" alt="Superstore Star Schema Diagram" width="750">
+</p>
 
 ### Dimension Tables
 
-- **CustomerDim** : customer attributes, tenure, and loyalty tier
-- **EmployeeDim** : employee performance and sales contribution
-- **ProductDim** : product categories, subcategories, and margin classification
-- **DateDim** : full calendar dimension supporting order and ship dates
-- **ShipModeDim** : shipping method reference data
+| Dimension Table | Description |
+|---|---|
+| **CustomerDim** | Stores customer attributes, location details, first/latest order dates, tenure, and loyalty tier |
+| **EmployeeDim** | Stores employee details, region, total sales, and performance tier |
+| **ProductDim** | Stores product category, subcategory, product name, and margin classification |
+| **DateDim** | Provides calendar attributes such as day, month, quarter, year, season, and day type |
+| **ShipModeDim** | Stores standardised shipping method information |
 
 ### Fact Table
 
-- **SalesFact** captures transaction-level metrics, including:
-    - Sales, quantity, discount, and profit
-    - Derived metrics such as NetSales and ProfitMargin
-    - Flags for returns, discounts, order size, and profitability
+The **SalesFact** table captures transaction-level sales metrics and links to the dimension tables using surrogate keys.
 
-This structure supports fast analytical queries and flexible reporting.
+Key fields include:
+
+- Sales, quantity, discount, and profit
+- NetSales and ProfitMargin
+- ReturnFlag, DiscountFlag, HighDiscountFlag, and ProfitFlag
+- OrderSizeCategory
+- CustomerKey, ProductKey, EmployeeKey, ShipModeKey, OrderDateKey, and ShipDateKey
+
+This design supports flexible reporting across customers, products, employees, time periods, shipping methods, returns, discounts, and profitability.
 
 ## Derived Business Logic
 
-To support deeper analysis, several derived attributes were implemented, including:
+Several derived attributes were created during the ETL process to make the warehouse more useful for analysis and reporting.
 
-- **Customer tenure and loyalty tier**
-- **Net sales and profit margin**
-- **Discount and high-discount flags**
-- **Order size categorisation**
-- **Return indicators**
-- **Employee performance tiers**
+| Derived Attribute | Location | Purpose |
+|---|---|---|
+| **Tenure** | CustomerDim | Calculates the number of years between a customer’s first and latest order |
+| **LoyaltyTier** | CustomerDim | Classifies customers as New, Regular, or VIP based on tenure |
+| **PerformanceTier** | EmployeeDim | Categorises employees as Low, Average, or High based on total sales |
+| **MarginType** | ProductDim | Identifies whether a product has strong profit margin performance |
+| **NetSales** | SalesFact | Calculates revenue after discount: `Sales - (Sales × Discount)` |
+| **ProfitMargin** | SalesFact | Calculates profit as a percentage of sales |
+| **ProfitFlag** | SalesFact | Classifies each transaction as Profit, No Profit, or Loss |
+| **DiscountFlag** | SalesFact | Indicates whether a discount was applied |
+| **HighDiscountFlag** | SalesFact | Identifies transactions with high discount levels |
+| **OrderSizeCategory** | SalesFact | Classifies orders as Small, Medium, or Large based on quantity |
+| **ReturnFlag** | SalesFact | Indicates whether an order was returned |
 
-These derived fields are calculated during ETL to ensure consistency across reports and dashboards.
+These fields are calculated during ETL rather than manually inside reports. This keeps business logic consistent across SSRS reports and avoids repeated calculations at the reporting layer.
 
 ## ETL Strategy
 
-The ETL process was implemented using **SSIS in Visual Studio 2022**, following a modular design:
+The ETL process follows this load order:
 
-- One ETL package per dimension and fact table
-- Dimension tables loaded first, followed by the fact table
-- Lookup transformations used to resolve surrogate keys
-- Derived business logic applied during transformation
+1. Raw CSV files are loaded into the source database, `SuperStore_dataset`.
+2. Clean relational tables are created in the normalized staging database, `OrderManagementDB`.
+3. Dimension ETL packages load `CustomerDim`, `EmployeeDim`, `ProductDim`, `DateDim`, and `ShipModeDim`.
+4. Lookup transformations retrieve surrogate keys from the dimension tables.
+5. The fact ETL package combines order, order line, customer, product, employee, shipping, date, and return data.
+6. Derived fields such as `NetSales`, `ProfitMargin`, `ReturnFlag`, `DiscountFlag`, and `OrderSizeCategory` are calculated.
+7. The final transformed records are loaded into `SalesFact`.
+8. SSRS reports are generated from the completed `SalesInsights_DW` warehouse.
 
 Key ETL goals:
 
@@ -108,16 +147,16 @@ Key ETL goals:
 
 ## Reporting
 
-To demonstrate analytical capability, the warehouse also supports **SSRS reports**.
+To demonstrate the analytical value of the warehouse, four **SSRS reports** were developed. These reports use the completed `SalesInsights_DW` warehouse and validate that the star schema can support practical retail reporting requirements.
 
-### SSRS Reports
+| Report | Purpose | Key Metrics / Fields |
+|---|---|---|
+| **Product Subcategory ROI Analysis by Margin Type** | Evaluates product profitability and return on investment across product subcategories | Margin Type, Category, Total Net Sales, Total Profit, Estimated Cost, ROI |
+| **Orders and Returns by Region, Category, and Subcategory** | Analyses return behaviour across regions and product groups | Region, Category, Subcategory, Total Orders, Returned Orders, Return Rate |
+| **Employee Performance Overview** | Compares employee sales contribution and performance across regions | Employee Name, Region, Performance Tier, Total Sales, Total Orders, Total Profit, Order Size Category |
+| **Product Category Performance and Discount Analysis** | Examines how discounting affects product category sales and profitability | Total Orders, Total Net Sales, Total Profit, High Discount Flag |
 
-- Product Subcategory ROI Analysis by Margin Type
-- Orders and Returns by Region, Category, and Subcategory
-- Employee Performance Overview
-- Product Category Performance and Discount Analysis
-
-These outputs validate the warehouse design and demonstrate practical business use cases.
+These reports demonstrate how the data warehouse supports profitability analysis, return monitoring, employee performance evaluation, and discount impact analysis.
 
 ## Technology Stack
 
