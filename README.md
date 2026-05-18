@@ -69,7 +69,7 @@ A **star schema** implemented in the SalesInsights_DW warehouse for analytical q
 The normalized staging database was designed to organise the raw Superstore data into relational entities before loading it into the data warehouse.
 
 <p align="center">
-  <img src="images/erd.png" alt="Superstore ERD Diagram" width="750">
+  <img src="images/ERD.png" alt="Superstore ERD Diagram" width="750">
 </p>
 
 The ERD includes customer, address, product, employee, shipping, order, order line, and return entities. This structure reduces duplication, enforces relationships between tables, and prepares the data for transformation into dimension and fact tables.
